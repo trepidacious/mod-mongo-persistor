@@ -31,7 +31,8 @@ The mongo-persistor module takes the following configuration:
         "read_preference": <e.g. "nearest" or "primary" etecetera>,
         "use_mongo_types": <bool>,
         "socket_timeout": <default 60000>,
-        "auto_connect_retry": <default true>
+        "auto_connect_retry": <default true>,
+        "use_objectids": <bool>
     }
 
 For example:
@@ -56,6 +57,7 @@ Let's take a look at each field in turn:
 * `use_ssl` enable SSL based connections.  See http://docs.mongodb.org/manual/tutorial/configure-ssl/ for more details. Defaults to `false`.
 * `read_preference` is the read preferences, see http://docs.mongodb.org/manual/core/read-preference/. Default is "primary".
 * `use_mongo_types` enable the use of mongo types such as Date, byte array, array list. Note that if enabled this will incur a performance overhead to all queries. Default is `false`.
+* `use_objectids` enable use of an `ObjectId` for `_id` of documents rather than a String UUID. This allows for greater compatibility with Mongo documents created using other libraries. Note that in order to find documents with an `ObjectId`, `use_mongo_types` must also be set to `true`. Defaults to `false`.
 
 ### Replsets or sharding
 
@@ -121,7 +123,14 @@ The reply will also contain a field `_id` if the document that was saved didn't 
         "_id": "ffeef2a7-5658-4905-a37c-cfb19f70471d"
     }
 
-If you save a document which already possesses an `_id` field, and a document with the same id already exists in the database, then the document will be updated.
+Note that if the `use_objectids` option is `true`, then the id will be generated as an `ObjectId` by the Mongo driver, for example:
+
+    {
+      "status": "ok"
+      "_id": {"$oid": "507f1f77bcf86cd799439011"}
+    }
+
+If you save a document which already possesses an `_id` field, and a document with the same id already exists in the database, then the document will be updated. This applies to both String UUIDs and ObjectIds.
 
 If an error occurs in saving the document a reply is returned:
 
@@ -520,8 +529,8 @@ To run an aggregation send a JSON message to the module main address:
             <pipeline_2>,
             <pipeline_N>,
         ]
-    }     
-    
+    }
+
 Where:
 * `collection` is the name of the MongoDB collection that you wish to aggregate in. This field is mandatory.
 * `pipelines` is a JSON array that composes your aggregation pipeline(s). This field is mandatory and obeys the normal MongoDB aggregation rules.
@@ -536,7 +545,7 @@ An example would be:
             { $group: { _id: "$_id.state", avgCityPop: { $avg: "$pop" } } }
         ]
     }  
-    
+
 That would return the average populations for cities in each state
 
 When the aggregation completes successfully, a reply message is sent back to the sender with the following data:
@@ -544,15 +553,15 @@ When the aggregation completes successfully, a reply message is sent back to the
     {
         "status": "ok",
         "result": <result>
-    }       
-    
+    }
+
 If an error occurs in finding the documents a reply is returned:
 
     {
         "status": "error",
         "message": <message>
     }
-    
+
 Where
 *`message` is an error message.
 

@@ -22,6 +22,7 @@ import org.vertx.java.core.Handler;
 import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
+import org.bson.types.ObjectId;
 
 import javax.net.ssl.SSLSocketFactory;
 import java.net.UnknownHostException;
@@ -47,6 +48,7 @@ public class MongoPersistor extends BusModBase implements Handler<Message<JsonOb
   protected String password;
   protected ReadPreference readPreference;
   protected boolean autoConnectRetry;
+  protected boolean useObjectIds;
   protected int socketTimeout;
   protected boolean useSSL;
 
@@ -68,6 +70,7 @@ public class MongoPersistor extends BusModBase implements Handler<Message<JsonOb
     readPreference = ReadPreference.valueOf(getOptionalStringConfig("read_preference", "primary"));
     int poolSize = getOptionalIntConfig("pool_size", 10);
     autoConnectRetry = getOptionalBooleanConfig("auto_connect_retry", true);
+    useObjectIds = getOptionalBooleanConfig("use_objectids", false);
     socketTimeout = getOptionalIntConfig("socket_timeout", 60000);
     useSSL = getOptionalBooleanConfig("use_ssl", false);
     useMongoTypes = getOptionalBooleanConfig("use_mongo_types", false);
@@ -193,13 +196,16 @@ public class MongoPersistor extends BusModBase implements Handler<Message<JsonOb
     if (doc == null) {
       return;
     }
-    String genID;
-    if (doc.getField("_id") == null) {
-      genID = UUID.randomUUID().toString();
-      doc.putString("_id", genID);
-    } else {
-      genID = null;
+
+    Boolean nullID = doc.getField("_id") == null;
+    String genID = null;
+    if (!useObjectIds) {
+      if (nullID) {
+        genID = UUID.randomUUID().toString();
+        doc.putString("_id", genID);
+      }
     }
+
     DBCollection coll = db.getCollection(collection);
     DBObject obj = jsonToDBObject(doc);
     WriteConcern writeConcern = WriteConcern.valueOf(getOptionalStringConfig("writeConcern", ""));
@@ -216,6 +222,12 @@ public class MongoPersistor extends BusModBase implements Handler<Message<JsonOb
       if (genID != null) {
         JsonObject reply = new JsonObject();
         reply.putString("_id", genID);
+        sendOK(message, reply);
+      } else if (nullID) {
+        JsonObject reply = new JsonObject();
+        JsonObject objectId = new JsonObject();
+        objectId.putString("$oid", ((ObjectId)(obj.get("_id"))).toHexString());
+        reply.putObject("_id", objectId);
         sendOK(message, reply);
       } else {
         sendOK(message);
@@ -610,4 +622,3 @@ public class MongoPersistor extends BusModBase implements Handler<Message<JsonOb
   }
 
 }
-
